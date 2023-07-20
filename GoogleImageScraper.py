@@ -6,11 +6,14 @@ Created on Sat Jul 18 13:01:02 2020
 """
 #import selenium drivers
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException
+
+from webdriver_manager.firefox import GeckoDriverManager
 
 #import helper libraries
 import time
@@ -26,7 +29,7 @@ import re
 import patch
 
 class GoogleImageScraper():
-    def __init__(self, webdriver_path, image_path, search_key="cat", number_of_images=1, headless=True, min_resolution=(0, 0), max_resolution=(1920, 1080), max_missed=10):
+    def __init__(self, image_path, search_key="cat", number_of_images=1, headless=True, min_resolution=(0, 0), max_resolution=(1920, 1080), max_missed=10):
         #check parameter types
         image_path = os.path.join(image_path, search_key)
         if (type(number_of_images)!=int):
@@ -73,6 +76,21 @@ class GoogleImageScraper():
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.max_missed = max_missed
+
+    def init_driver(headless):
+        driver = None
+
+        
+        
+
+        options = Options()
+        if(headless):
+            options.add_argument('--headless')
+        driver = webdriver.Firefox(FirefoxService(GeckoDriverManager().install()), options=options)
+        driver.set_window_size(1400,1050)
+        driver.get("https://www.google.com")
+
+
 
     def find_image_urls(self):
         """

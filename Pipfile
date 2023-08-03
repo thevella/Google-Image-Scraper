@@ -8,6 +8,8 @@ selenium = "*"
 requests = "*"
 pillow = "*"
 webdriver-manager = "*"
+mypy = "*"
+pebble = "*"
 
 [dev-packages]
 

@@ -9,44 +9,39 @@ Created on Sun Jul 12 11:02:06 2020
 import os
 import concurrent.futures
 from GoogleImageScraper import GoogleImageScraper
-from patch import webdriver_executable
-
-
-def worker_thread(search_key):
-    image_scraper = GoogleImageScraper(
-        webdriver_path, 
-        image_path, 
-        search_key, 
-        number_of_images, 
-        headless, 
-        min_resolution, 
-        max_resolution, 
-        max_missed)
-    image_urls = image_scraper.find_image_urls()
-    image_scraper.save_images(image_urls, keep_filenames)
-
-    #Release resources
-    del image_scraper
+from datetime import timedelta
+import argparse
 
 if __name__ == "__main__":
-    #Define file path
-    webdriver_path = os.path.normpath(os.path.join(os.getcwd(), 'webdriver', webdriver_executable()))
-    image_path = os.path.normpath(os.path.join(os.getcwd(), 'photos'))
+    # arg_parser = argparse.ArgumentParser(description="Download Images from Google Images using selenium")
+    # arg_parser.add_argument('')
 
-    #Add new search key into array ["cat","t-shirt","apple","orange","pear","fish"]
-    search_keys = list(set(["cat","t-shirt"]))
-
-    #Parameters
-    number_of_images = 5                # Desired number of images
     headless = True                     # True = No Chrome GUI
-    min_resolution = (0, 0)             # Minimum desired image resolution
-    max_resolution = (9999, 9999)       # Maximum desired image resolution
-    max_missed = 10                     # Max number of failed images before exit
-    number_of_workers = 1               # Number of "workers" used
-    keep_filenames = False              # Keep original URL image filenames
 
-    #Run each search_key in a separate thread
-    #Automatically waits for all threads to finish
-    #Removes duplicate strings from search_keys
-    with concurrent.futures.ThreadPoolExecutor(max_workers=number_of_workers) as executor:
-        executor.map(worker_thread, search_keys)
+    search_terms = [(["gravel -bike", "pea gravel -bike", "coarse gravel -bike", "gravel foundation -bike"], "./images2/gravel/",),
+                    (["sandy ground -beach", "sand foundation -beach", "sand -beach", "construction sand"], "./images2/sand/",),
+                    (["loamy soil", "loamy ground", "loam construction", "loam"], "./images2/loam/",),
+                    (["clay ground", "clay soil", "clay -pottery", "clay construction"], "./images2/clay/",),
+                    (["packed soil", "hard soil", "compacted soil"], "./images2/compacted_soil/",),
+                    (["mixed aggregate", "mixed soil and gravel", "diverse ground texture", "highway shoulder"], "./images2/mixed_soil/",)]
+
+    date_num_ranges = 5
+    date_delta = timedelta(weeks=7*4)
+
+    pages_num: int = 2
+
+    threads_search_num: int = 5
+    threads_download_num: int = 10
+
+    driver_type = GoogleImageScraper.DriverType.Firefox 
+    driver_headless: bool = True
+
+
+    gimage = GoogleImageScraper(search_terms[0][0], search_terms[0][1], date_num_ranges, date_delta, pages_num, threads_search_num, \
+                                threads_download_num, driver_type, driver_headless)
+
+    for (terms, save_loc) in search_terms:
+        gimage.search_terms = terms
+        gimage.save_location = save_loc
+        gimage.run()
+

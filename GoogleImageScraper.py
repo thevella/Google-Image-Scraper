@@ -1,227 +1,115 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sat Jul 18 13:01:02 2020
-
-@author: OHyic
-"""
-#import selenium drivers
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.firefox.service import Service as FirefoxService
+from selenium.webdriver import Keys, ActionChains
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException
+from urllib.parse import quote, urlparse, parse_qs
 
-from webdriver_manager.firefox import GeckoDriverManager
+import time, datetime
 
-#import helper libraries
-import time
-import urllib.request
-from urllib.parse import urlparse
-import os
-import requests
-import io
-from PIL import Image
-import re
+# Just for typing
+from os import PathLike
+from typing import List
+from selenium.webdriver.remote.webdriver import WebDriver as RemoteWebDriver
 
-#custom patch libraries
-import patch
+from ImageScraper import ImageScraper
 
-class GoogleImageScraper():
-    def __init__(self, image_path, search_key="cat", number_of_images=1, headless=True, min_resolution=(0, 0), max_resolution=(1920, 1080), max_missed=10):
-        #check parameter types
-        image_path = os.path.join(image_path, search_key)
-        if (type(number_of_images)!=int):
-            print("[Error] Number of images must be integer value.")
-            return
-        if not os.path.exists(image_path):
-            print("[INFO] Image path not found. Creating a new folder.")
-            os.makedirs(image_path)
+class GoogleImageScraper(ImageScraper):
+
+    @staticmethod
+    def get_image_links(searchterm: str, driver: RemoteWebDriver, before: datetime.date | None = None, after: datetime.date | None = None, pages_num: int = -1) -> List[str]:
+        if (not before is None and not isinstance(before, datetime.date)) or (not after is None and not isinstance(after, datetime.date)):
+            raise TypeError
+
+
+        urlsearchterm = "+".join([quote(term, safe="") for term in searchterm.split(" ")])
+        
+        if not before is None:
+            urlsearchterm += "+"+quote("before:{:04d}-{:02d}-{:02d}".format(before.year, before.month, before.day), safe="")
+
+        
+        if not after is None:
+            urlsearchterm += "+"+quote("after:{:04d}-{:02d}-{:02d}".format(after.year, after.month, after.day), safe="")
+
+        driver.get(f"https://www.google.com/search?q={urlsearchterm}&tbm=isch")
+        
+        perf_time = time.time()
+
+        starttime = time.time()
+
+        timeout_s = 50
+
+        num_pages = 0
+
+        while num_pages < pages_num or pages_num == -1:
+            ActionChains(driver).send_keys(Keys.PAGE_DOWN).perform()
+            time.sleep(0.25)
             
-        #check if chromedriver is installed
-        if (not os.path.isfile(webdriver_path)):
-            is_patched = patch.download_lastest_chromedriver()
-            if (not is_patched):
-                exit("[ERR] Please update the chromedriver.exe in the webdriver folder according to your chrome version:https://chromedriver.chromium.org/downloads")
+            if time.time() - starttime > timeout_s:
+                driver.refresh()
+                starttime = time.time()
+                continue
 
-        for i in range(1):
-            try:
-                #try going to www.google.com
-                options = Options()
-                if(headless):
-                    options.add_argument('--headless')
-                driver = webdriver.Chrome(webdriver_path, chrome_options=options)
-                driver.set_window_size(1400,1050)
-                driver.get("https://www.google.com")
-                try:
-                    WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.ID, "W0wltc"))).click()
-                except Exception as e:
-                    continue
-            except Exception as e:
-                #update chromedriver
-                pattern = '(\d+\.\d+\.\d+\.\d+)'
-                version = list(set(re.findall(pattern, str(e))))[0]
-                is_patched = patch.download_lastest_chromedriver(version)
-                if (not is_patched):
-                    exit("[ERR] Please update the chromedriver.exe in the webdriver folder according to your chrome version:https://chromedriver.chromium.org/downloads")
+            elements = driver.find_elements(By.XPATH, "/html/body/div[2]/c-wiz/div[3]/div[1]/div/div/div/div/div[1]/div[2]/div[1]/div[2]/div[1]/div")
 
-        self.driver = driver
-        self.search_key = search_key
-        self.number_of_images = number_of_images
-        self.webdriver_path = webdriver_path
-        self.image_path = image_path
-        self.url = "https://www.google.com/search?q=%s&source=lnms&tbm=isch&sa=X&ved=2ahUKEwie44_AnqLpAhUhBWMBHUFGD90Q_AUoAXoECBUQAw&biw=1920&bih=947"%(search_key)
-        self.headless=headless
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.max_missed = max_missed
-
-    def init_driver(headless):
-        driver = None
-
+            elements_button = driver.find_elements(By.XPATH, "/html/body/div[2]/c-wiz/div[3]/div[1]/div/div/div/div/div[1]/div[2]/div[2]/input")
+            
+            if len(elements) > 0:
+                if elements[0].text == "Looks like you've reached the end":
+                    break
+        
+            if len(elements_button) > 0:
+                if elements_button[0].is_displayed():
+                    elements_button[0].click()
+                    num_pages += 1
+                    starttime = time.time()
         
         
+        elements_images = driver.find_elements(By.CSS_SELECTOR, "div.BUooTd")
+        
+        [elm.click() for elm in elements_images]
+        
 
-        options = Options()
-        if(headless):
-            options.add_argument('--headless')
-        driver = webdriver.Firefox(FirefoxService(GeckoDriverManager().install()), options=options)
-        driver.set_window_size(1400,1050)
-        driver.get("https://www.google.com")
+        
+        elements_images = driver.find_elements(By.XPATH, "/html/body/div[2]/c-wiz/div[3]/div[1]/div/div/div/div/div[1]/div[1]/span/div[1]/div[1]/div/div/a[1]")
+        
+        # print("Browser time: {:.2f}".format(time.time() - perf_time))
+        perf_time = time.time()
+        
 
+        elm_links = [elm.get_attribute("href") for elm in elements_images]
 
+        # print("Link pulling time: {:.2f}".format(time.time() - perf_time))
 
-    def find_image_urls(self):
-        """
-            This function search and return a list of image urls based on the search key.
-            Example:
-                google_image_scraper = GoogleImageScraper("webdriver_path","image_path","search_key",number_of_photos)
-                image_urls = google_image_scraper.find_image_urls()
+        perf_time = time.time()
 
-        """
-        print("[INFO] Gathering image links")
-        self.driver.get(self.url)
-        image_urls=[]
-        count = 0
-        missed_count = 0
-        indx_1 = 0
-        indx_2 = 0
-        search_string = '//*[@id="islrg"]/div[1]/div[%s]/a[1]/div[1]/img'
-        time.sleep(3)
-        while self.number_of_images > count and missed_count < self.max_missed:
-            if indx_2 > 0:
-                try:
-                    imgurl = self.driver.find_element(By.XPATH, search_string%(indx_1,indx_2+1))
-                    imgurl.click()
-                    indx_2 = indx_2 + 1
-                    missed_count = 0
-                except Exception:
-                    try:
-                        imgurl = self.driver.find_element(By.XPATH, search_string%(indx_1+1,1))
-                        imgurl.click()
-                        indx_2 = 1
-                        indx_1 = indx_1 + 1
-                    except:
-                        indx_2 = indx_2 + 1
-                        missed_count = missed_count + 1
-            else:
-                try:
-                    imgurl = self.driver.find_element(By.XPATH, search_string%(indx_1+1))
-                    imgurl.click()
-                    missed_count = 0
-                    indx_1 = indx_1 + 1    
-                except Exception:
-                    try:
-                        imgurl = self.driver.find_element(By.XPATH, '//*[@id="islrg"]/div[1]/div[%s]/div[%s]/a[1]/div[1]/img'%(indx_1,indx_2+1))
-                        imgurl.click()
-                        missed_count = 0
-                        indx_2 = indx_2 + 1
-                        search_string = '//*[@id="islrg"]/div[1]/div[%s]/div[%s]/a[1]/div[1]/img'
-                    except Exception:
-                        indx_1 = indx_1 + 1
-                        missed_count = missed_count + 1
-                    
+        img_links = []
+        for elm in elm_links:
             try:
-                #select image from the popup
-                time.sleep(1)
-                class_names = ["n3VNCb","iPVvYb","r48jcc","pT0Scc"]
-                images = [self.driver.find_elements(By.CLASS_NAME, class_name) for class_name in class_names if len(self.driver.find_elements(By.CLASS_NAME, class_name)) != 0 ][0]
-                for image in images:
-                    #only download images that starts with http
-                    src_link = image.get_attribute("src")
-                    if(("http" in src_link) and (not "encrypted" in src_link)):
-                        print(
-                            f"[INFO] {self.search_key} \t #{count} \t {src_link}")
-                        image_urls.append(src_link)
-                        count +=1
-                        break
-            except Exception:
-                print("[INFO] Unable to get link")
-
-            try:
-                #scroll page to load next image
-                if(count%3==0):
-                    self.driver.execute_script("window.scrollTo(0, "+str(indx_1*60)+");")
-                element = self.driver.find_element(By.CLASS_NAME,"mye4qd")
-                element.click()
-                print("[INFO] Loading next page")
-                time.sleep(3)
-            except Exception:
-                time.sleep(1)
-
-
-
-        self.driver.quit()
-        print("[INFO] Google search ended")
-        return image_urls
-
-    def save_images(self,image_urls, keep_filenames):
-        print(keep_filenames)
-        #save images into file directory
-        """
-            This function takes in an array of image urls and save it into the given image path/directory.
-            Example:
-                google_image_scraper = GoogleImageScraper("webdriver_path","image_path","search_key",number_of_photos)
-                image_urls=["https://example_1.jpg","https://example_2.jpg"]
-                google_image_scraper.save_images(image_urls)
-
-        """
-        print("[INFO] Saving image, please wait...")
-        for indx,image_url in enumerate(image_urls):
-            try:
-                print("[INFO] Image url:%s"%(image_url))
-                search_string = ''.join(e for e in self.search_key if e.isalnum())
-                image = requests.get(image_url,timeout=5)
-                if image.status_code == 200:
-                    with Image.open(io.BytesIO(image.content)) as image_from_web:
-                        try:
-                            if (keep_filenames):
-                                #extact filename without extension from URL
-                                o = urlparse(image_url)
-                                image_url = o.scheme + "://" + o.netloc + o.path
-                                name = os.path.splitext(os.path.basename(image_url))[0]
-                                #join filename and extension
-                                filename = "%s.%s"%(name,image_from_web.format.lower())
-                            else:
-                                filename = "%s%s.%s"%(search_string,str(indx),image_from_web.format.lower())
-
-                            image_path = os.path.join(self.image_path, filename)
-                            print(
-                                f"[INFO] {self.search_key} \t {indx} \t Image saved at: {image_path}")
-                            image_from_web.save(image_path)
-                        except OSError:
-                            rgb_im = image_from_web.convert('RGB')
-                            rgb_im.save(image_path)
-                        image_resolution = image_from_web.size
-                        if image_resolution != None:
-                            if image_resolution[0]<self.min_resolution[0] or image_resolution[1]<self.min_resolution[1] or image_resolution[0]>self.max_resolution[0] or image_resolution[1]>self.max_resolution[1]:
-                                image_from_web.close()
-                                os.remove(image_path)
-
-                        image_from_web.close()
+                img_links.append(parse_qs(urlparse(elm).query)["imgurl"][0])
             except Exception as e:
-                print("[ERROR] Download failed: ",e)
-                pass
-        print("--------------------------------------------------")
-        print("[INFO] Downloads completed. Please note that some photos were not downloaded as they were not in the correct format (e.g. jpg, jpeg, png)")
+                #print(elm.get_attribute("href"))
+                continue
+        # print("Processing time: {:.2f}".format(time.time() - perf_time))
+
+        return img_links
+
+
+
+
+
+
+
+
+#searches = ["sandy soil", "loamy silt soil"]
+
+#save_dir = "./Images/sand"
+
+
+searches_agg = [ [["sandy soil", "sand", "beachy soil"],"./Images/sand"],
+                 [["soil", "loose soil", ""], "./Images/loose_soil"],
+                 [["packed soil", "dry soil", "hard soil"], "./Images/hard_soil"]
+                ]
+
+
+            
+    
+    
+    
